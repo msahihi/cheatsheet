@@ -1,0 +1,59 @@
+# Workflow using Vault Github Action
+# 1. Create an Approle in your vault 
+# 2. [Optional] - limit Approle access to only read on specific key path
+# 3. Create VAULT_ADDR, VAULT_ROLE_ID, VAULT_SECRET_ID, VAULT_NAMESPACE as org secret
+# 4. Assign secrets to your Github Repo
+---
+name: Vault GA
+on:
+  schedule:
+    - cron:  '0 6 * * *' #Everyday at 06:00 am UTC
+  workflow_dispatch:
+    inputs:
+      expires_in:
+        description: 'Should it be enabled?'
+        type: string
+        required: false
+        default: "10"
+env:
+  EXPIRES_IN: ${{ github.event.inputs.expires_in || 10 }}        
+jobs:
+  use-host-docker-daemon:
+    name: Use host docker daemon
+    runs-on: [self-hosted]
+    steps:
+    - name: Login to vault
+      uses: hashicorp/vault-action@v2.3.1
+      with:
+        url: ${{ secrets.VAULT_ADDR }}
+        method: approle
+        roleId: ${{ secrets.VAULT_ROLE_ID }}
+        secretId: ${{ secrets.VAULT_SECRET_ID }}
+        namespace: ${{ secrets.VAULT_NAMESPACE }}
+        secrets: 
+          kv/data/slack/bot_token token | SLACK_API_TOKEN;
+          kv/data/github/read_token token | GITHUB_TOKEN;
+        exportToken: true
+        exportEnv: true
+    - name : checkout repository
+      uses: actions/checkout@v2
+    - name : checkout second repository
+      uses: actions/checkout@v2
+      with:
+        repository: org/repo
+        path: path/to/clone
+        token: ${{ env.GITHUB_TOKEN }}
+    - name: Install dependencies
+      run: |
+        wget -O- https://apt.releases.hashicorp.com/gpg > /tmp/hashicrop.key
+        gpg --no-default-keyring --keyring /tmp/hashicrop_keyring.gpg --import /tmp/hashicrop.key
+        gpg --no-default-keyring --keyring /tmp/hashicrop_keyring.gpg --export > /etc/apt/trusted.gpg.d/hashicrop.gpg
+        apt update
+        apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
+        apt-get update && apt-get install jq vault -y
+        # https://github.com/hashicorp/vault/issues/10924
+        setcap -r /usr/bin/vault
+    - name: Send to Slack
+      run:
+        # ./go run main.go ${EXPIRES_IN} 
+        # Call some vault commands
