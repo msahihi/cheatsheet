@@ -6,4 +6,5 @@ _Note: the list is in progress_
 
 ## Available Cheat sheets
 
-- [Slack](slack.md)
+- [Slack](slack)
+- [Github](github)
